@@ -4,10 +4,10 @@
 
 ## 仓库角色
 
-- HoneyTea: 客户端，负责命令执行、文件访问、子进程插件管理
-- LemonTea: 服务端，负责接收 HoneyTea 连接，并通过 Crow 暴露 HTTP API
-- LemonTea-doc: 文档仓库
-- LemonTea-vue3: 前端仓库，提供图形化控制台
+- [HoneyTea](https://github.com/RareSpecies233/LemonTea): 客户端，负责命令执行、文件访问、子进程插件管理
+- [LemonTea](https://github.com/RareSpecies233/LemonTea): 服务端，负责接收 HoneyTea 连接，并通过 Crow 暴露 HTTP API
+- [LemonTea-doc](https://github.com/RareSpecies233/LemonTea-doc): 文档仓库
+- [LemonTea-vue3](https://github.com/RareSpecies233/LemonTea-vue3): 前端仓库，提供图形化控制台
 
 ## 本次已交付内容
 
