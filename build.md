@@ -15,6 +15,15 @@ cd LemonTea-doc
 
 该命令成功生成了 [release/lemontea/macos](release/lemontea/macos) 下的 `lemontea`，并同时打包了运行所需的 `libdatachannel` 动态库。
 
+另外，我也已实际执行并通过以下全量构建命令：
+
+```bash
+cd LemonTea-doc
+./scripts/macOS_build_release.sh --clean
+```
+
+该命令会清理 [LemonTea-doc/.build-release](LemonTea-doc/.build-release)，然后默认构建 HoneyTea Raspberry Pi arm64、LemonTea macOS 和 LemonTea Linux x86_64 三个目标。
+
 ## 脚本位置
 
 - [scripts/macOS_build_release.sh](scripts/macOS_build_release.sh)
