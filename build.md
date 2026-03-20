@@ -5,6 +5,8 @@
 ## 脚本位置
 
 - [scripts/build_release.sh](scripts/build_release.sh)
+- [toolchains/rpi-aarch64-clang-toolchain.example.cmake](toolchains/rpi-aarch64-clang-toolchain.example.cmake)
+- [toolchains/linux-x64-clang-toolchain.example.cmake](toolchains/linux-x64-clang-toolchain.example.cmake)
 
 该脚本统一负责以下任务：
 
@@ -66,17 +68,23 @@ release/
 构建 HoneyTea 的树莓派版本：
 
 ```bash
+cp toolchains/rpi-aarch64-clang-toolchain.example.cmake toolchains/rpi-aarch64-clang-toolchain.local.cmake
+# 编辑 toolchains/rpi-aarch64-clang-toolchain.local.cmake 中的 TOOLCHAIN_ROOT 和 TARGET_SYSROOT
+
 ./scripts/build_release.sh \
   --build-honey-rpi \
-  --honey-rpi-toolchain /absolute/path/to/rpi-aarch64-clang-toolchain.cmake
+  --honey-rpi-toolchain ./toolchains/rpi-aarch64-clang-toolchain.local.cmake
 ```
 
 构建 LemonTea 的 Linux 64 位交叉编译版本：
 
 ```bash
+cp toolchains/linux-x64-clang-toolchain.example.cmake toolchains/linux-x64-clang-toolchain.local.cmake
+# 编辑 toolchains/linux-x64-clang-toolchain.local.cmake 中的 TOOLCHAIN_ROOT 和 TARGET_SYSROOT
+
 ./scripts/build_release.sh \
   --build-lemon-linux \
-  --lemon-linux-toolchain /absolute/path/to/linux-x64-toolchain.cmake
+  --lemon-linux-toolchain ./toolchains/linux-x64-clang-toolchain.local.cmake
 ```
 
 一次性构建三种目标：
@@ -86,8 +94,8 @@ release/
   --build-honey-rpi \
   --build-lemon-macos \
   --build-lemon-linux \
-  --honey-rpi-toolchain /absolute/path/to/rpi-aarch64-clang-toolchain.cmake \
-  --lemon-linux-toolchain /absolute/path/to/linux-x64-toolchain.cmake
+  --honey-rpi-toolchain ./toolchains/rpi-aarch64-clang-toolchain.local.cmake \
+  --lemon-linux-toolchain ./toolchains/linux-x64-clang-toolchain.local.cmake
 ```
 
 ## 参数说明
@@ -127,6 +135,16 @@ LemonTea-doc/.build-release/
 - system name: Linux
 - processor: aarch64
 - compiler: clang / clang++
+
+仓库中已提供示例模板：[toolchains/rpi-aarch64-clang-toolchain.example.cmake](toolchains/rpi-aarch64-clang-toolchain.example.cmake)。
+
+## 关于 Linux x64 交叉编译
+
+如果你希望从 macOS 交叉编译出可在 Linux x64 上运行的 LemonTea，可以直接从模板开始：
+
+- [toolchains/linux-x64-clang-toolchain.example.cmake](toolchains/linux-x64-clang-toolchain.example.cmake)
+
+这个模板同样基于 clang + sysroot 的方式，适合你统一维护一套 LLVM 交叉编译环境。
 
 ## 建议的 toolchain 文件检查项
 

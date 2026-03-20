@@ -8,3 +8,4 @@ Temp
 
 
 .build-release
+toolchains/*.local.cmake
