@@ -285,6 +285,29 @@ copy_artifact() {
   log "copied ${source_path} -> ${target_dir}/${target_name}"
 }
 
+copy_shared_libraries() {
+  local build_dir="$1"
+  local target_dir="$2"
+
+  # Copy any shared libraries produced in the build tree (lib*.so*, *.dylib)
+  # so the executable can run with an $ORIGIN rpath or when LD_LIBRARY_PATH
+  # points to the same directory.
+  if [[ -d "${build_dir}" ]]; then
+    mkdir -p "${target_dir}"
+    # Linux shared libs (use find -print0 to handle spaces and avoid array expansion)
+    while IFS= read -r -d '' f; do
+      cp -p "$f" "${target_dir}/" || true
+      log "bundled shared lib $f -> ${target_dir}/"
+    done < <(find "${build_dir}" -type f -name 'lib*.so*' -print0 2>/dev/null)
+
+    # macOS dylibs
+    while IFS= read -r -d '' f; do
+      cp -p "$f" "${target_dir}/" || true
+      log "bundled dylib $f -> ${target_dir}/"
+    done < <(find "${build_dir}" -type f -name '*.dylib' -print0 2>/dev/null)
+  fi
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -365,6 +388,7 @@ build_honey_rpi() {
   log "building HoneyTea for Raspberry Pi arm64"
   configure_and_build "${HONEY_DIR}" "${build_dir}" -DCMAKE_TOOLCHAIN_FILE="${HONEY_RPI_TOOLCHAIN}"
   copy_artifact "${build_dir}/honeytea" "${RELEASE_DIR}/honeytea/raspberrypi-arm64" "honeytea"
+  copy_shared_libraries "${build_dir}" "${RELEASE_DIR}/honeytea/raspberrypi-arm64"
 }
 
 build_lemon_macos() {
@@ -372,6 +396,7 @@ build_lemon_macos() {
   log "building LemonTea for macOS native"
   configure_and_build "${LEMON_DIR}" "${build_dir}"
   copy_artifact "${build_dir}/lemontea" "${RELEASE_DIR}/lemontea/macos" "lemontea"
+  copy_shared_libraries "${build_dir}" "${RELEASE_DIR}/lemontea/macos"
 }
 
 build_lemon_linux() {
@@ -382,6 +407,7 @@ build_lemon_linux() {
   log "building LemonTea for Linux x64"
   configure_and_build "${LEMON_DIR}" "${build_dir}" -DCMAKE_TOOLCHAIN_FILE="${LEMON_LINUX_TOOLCHAIN}"
   copy_artifact "${build_dir}/lemontea" "${RELEASE_DIR}/lemontea/linux-x64" "lemontea"
+  copy_shared_libraries "${build_dir}" "${RELEASE_DIR}/lemontea/linux-x64"
 }
 
 main() {
