@@ -24,6 +24,13 @@ cd LemonTea-doc
 
 该命令会清理 [LemonTea-doc/.build-release](LemonTea-doc/.build-release)，然后默认构建 HoneyTea Raspberry Pi arm64、LemonTea macOS 和 LemonTea Linux x86_64 三个目标。
 
+前端 LemonTea-vue3 不包含在该脚本中，因此前端改动仍需单独执行：
+
+```bash
+cd ../LemonTea-vue3
+npm run build
+```
+
 ## 脚本位置
 
 - [scripts/macOS_build_release.sh](scripts/macOS_build_release.sh)
