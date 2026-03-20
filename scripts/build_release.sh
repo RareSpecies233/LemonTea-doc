@@ -269,7 +269,20 @@ configure_and_build() {
   local build_dir="$2"
   shift 2
 
-  cmake -S "${source_dir}" -B "${build_dir}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" "$@"
+  # Prefer Ninja generator if available to avoid Makefile/tool selection issues
+  local generator_args=()
+  if command -v ninja >/dev/null 2>&1; then
+    generator_args=( -G Ninja )
+  fi
+
+  # If an existing build dir was created with a different generator, remove it
+  # to avoid CMake generator mismatch errors.
+  if [[ -d "${build_dir}" && -f "${build_dir}/CMakeCache.txt" ]]; then
+    log "removing stale build dir ${build_dir} to avoid generator mismatch"
+    rm -rf "${build_dir}"
+  fi
+
+  cmake -S "${source_dir}" -B "${build_dir}" "${generator_args[@]}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" "$@"
   cmake --build "${build_dir}" --config "${BUILD_TYPE}"
 }
 
@@ -375,6 +388,102 @@ prepare() {
   ensure_cross_prerequisites
   require_command cmake
   prepare_generated_toolchains
+  # If user provided a toolchain path but the file doesn't exist, attempt to
+  # create a local toolchain by copying from an example file in the toolchains/
+  # directory (e.g. foo.example.cmake -> foo.local.cmake). This helps users
+  # who followed the docs but forgot to copy the example.
+  if [[ -n "${HONEY_RPI_TOOLCHAIN}" && ! -f "${HONEY_RPI_TOOLCHAIN}" ]]; then
+    local example
+    example="${HONEY_RPI_TOOLCHAIN/.local.cmake/.example.cmake}"
+    if [[ -f "${example}" ]]; then
+      log "toolchain ${HONEY_RPI_TOOLCHAIN} not found, copying example ${example} -> ${HONEY_RPI_TOOLCHAIN} (please edit TOOLCHAIN_ROOT/TARGET_SYSROOT)"
+      mkdir -p "$(dirname "${HONEY_RPI_TOOLCHAIN}")"
+      cp "${example}" "${HONEY_RPI_TOOLCHAIN}"
+    else
+      # try a generic example with same basename
+      example="$(dirname "${HONEY_RPI_TOOLCHAIN}")/$(basename "${HONEY_RPI_TOOLCHAIN}" .local.cmake).example.cmake"
+      if [[ -f "${example}" ]]; then
+        log "toolchain ${HONEY_RPI_TOOLCHAIN} not found, copying example ${example} -> ${HONEY_RPI_TOOLCHAIN} (please edit TOOLCHAIN_ROOT/TARGET_SYSROOT)"
+        mkdir -p "$(dirname "${HONEY_RPI_TOOLCHAIN}")"
+        cp "${example}" "${HONEY_RPI_TOOLCHAIN}"
+      fi
+    fi
+  fi
+
+  if [[ -n "${LEMON_LINUX_TOOLCHAIN}" && ! -f "${LEMON_LINUX_TOOLCHAIN}" ]]; then
+    local example2
+    example2="${LEMON_LINUX_TOOLCHAIN/.local.cmake/.example.cmake}"
+    if [[ -f "${example2}" ]]; then
+      log "toolchain ${LEMON_LINUX_TOOLCHAIN} not found, copying example ${example2} -> ${LEMON_LINUX_TOOLCHAIN} (please edit TOOLCHAIN_ROOT/TARGET_SYSROOT)"
+      mkdir -p "$(dirname "${LEMON_LINUX_TOOLCHAIN}")"
+      cp "${example2}" "${LEMON_LINUX_TOOLCHAIN}"
+    else
+      example2="$(dirname "${LEMON_LINUX_TOOLCHAIN}")/$(basename "${LEMON_LINUX_TOOLCHAIN}" .local.cmake).example.cmake"
+      if [[ -f "${example2}" ]]; then
+        log "toolchain ${LEMON_LINUX_TOOLCHAIN} not found, copying example ${example2} -> ${LEMON_LINUX_TOOLCHAIN} (please edit TOOLCHAIN_ROOT/TARGET_SYSROOT)"
+        mkdir -p "$(dirname "${LEMON_LINUX_TOOLCHAIN}")"
+        cp "${example2}" "${LEMON_LINUX_TOOLCHAIN}"
+      fi
+    fi
+  fi
+  # Normalize toolchain paths to absolute paths so CMake can always locate them
+  make_abs_path() {
+    local p="$1"
+    if [[ -z "${p}" ]]; then
+      printf '%s' ""
+      return
+    fi
+    if [[ "${p}" = /* ]]; then
+      printf '%s' "${p}"
+      return
+    fi
+    # interpret relative paths as relative to DOC_DIR
+    printf '%s' "${DOC_DIR%/}/${p#./}"
+  }
+
+  if [[ -n "${HONEY_RPI_TOOLCHAIN}" ]]; then
+    HONEY_RPI_TOOLCHAIN="$(make_abs_path "${HONEY_RPI_TOOLCHAIN}")"
+  fi
+  if [[ -n "${LEMON_LINUX_TOOLCHAIN}" ]]; then
+    LEMON_LINUX_TOOLCHAIN="$(make_abs_path "${LEMON_LINUX_TOOLCHAIN}")"
+  fi
+
+  validate_toolchain() {
+    local f="$1"
+    local cc cpp
+    # extract quoted value if present
+    cc="$(grep -E 'CMAKE_C_COMPILER' "${f}" 2>/dev/null | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"
+    cpp="$(grep -E 'CMAKE_CXX_COMPILER' "${f}" 2>/dev/null | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"
+    # fallback: extract unquoted token
+    if [[ -z "${cc}" ]]; then
+      cc="$(grep -E 'CMAKE_C_COMPILER' "${f}" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '()')"
+    fi
+    if [[ -z "${cpp}" ]]; then
+      cpp="$(grep -E 'CMAKE_CXX_COMPILER' "${f}" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '()')"
+    fi
+    for p in "${cc}" "${cpp}"; do
+      if [[ -n "${p}" ]]; then
+        if [[ "${p}" = /* ]]; then
+          if [[ ! -x "${p}" ]]; then
+            fail "toolchain ${f} references compiler ${p} which does not exist or is not executable; please edit the toolchain file"
+          fi
+        else
+          # relative or bare name; check PATH
+          if ! command -v "${p}" >/dev/null 2>&1; then
+            fail "toolchain ${f} references compiler ${p} which is not in PATH; please edit the toolchain file to point to a valid compiler"
+          fi
+        fi
+      fi
+    done
+  }
+
+  if [[ -n "${HONEY_RPI_TOOLCHAIN}" && -f "${HONEY_RPI_TOOLCHAIN}" ]]; then
+    validate_toolchain "${HONEY_RPI_TOOLCHAIN}"
+  fi
+  if [[ -n "${LEMON_LINUX_TOOLCHAIN}" && -f "${LEMON_LINUX_TOOLCHAIN}" ]]; then
+    validate_toolchain "${LEMON_LINUX_TOOLCHAIN}"
+  fi
+
   if [[ "${BUILD_HONEY_RPI}" == true || "${BUILD_LEMON_LINUX}" == true ]]; then
     prepare_cross_openssl
   fi

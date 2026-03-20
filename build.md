@@ -1,3 +1,110 @@
+# 构建与发布说明（已更新）
+
+本文档说明如何使用仓库内的统一构建脚本 `scripts/build_release.sh` 构建三种发布产物：
+
+- HoneyTea（Raspberry Pi aarch64）
+- LemonTea（macOS 原生）
+- LemonTea（Linux x86_64 交叉编译）
+
+建议先阅读“快速开始”并按照示例执行，再根据需要调整 toolchain 文件或 sysroot。
+
+**输出目录**
+
+构建完成后产物放在仓库根目录的 `release/` 下，默认结构：
+
+```text
+release/
+  honeytea/
+    raspberrypi-arm64/
+      honeytea
+      lib*.so*    # 如果是 Linux/aarch64 的共享库会与可执行文件同目录
+  lemontea/
+    macos/
+      lemontea
+    linux-x64/
+      lemontea
+```
+
+**快速开始（推荐） — 使用脚本自动生成并使用 GCC 工具链**
+
+脚本可以自动生成基于 Homebrew cross toolchains 的 GCC 类型 toolchain，并为交叉构建准备 OpenSSL 等依赖（若启用 bootstrap）。这是最少手工干预的流程：
+
+```bash
+# 1) 全部清理并生成（推荐）
+./scripts/build_release.sh --clean
+
+# 2) 构建所有目标（macOS 本机 + Linux x64 + Raspberry Pi）
+./scripts/build_release.sh
+
+# 或者仅构建 Raspberry Pi（使用脚本自动生成的 toolchain）
+./scripts/build_release.sh --clean --build-honey-rpi
+
+# 若要显式使用脚本生成的工具链：
+./scripts/build_release.sh --build-honey-rpi --honey-rpi-toolchain .build-release/toolchains/rpi-aarch64-gcc.cmake
+```
+
+该工作流适合在 macOS 主机上，结合 Homebrew 提供的交叉工具链包使用（脚本会尝试安装需要的 formula）。
+
+**手动工作流 — 使用 clang + 本地 toolchain（可选）**
+
+如果你更偏好 clang + 自行准备的 sysroot，按原始文档步骤：
+
+1. 复制示例 toolchain：
+
+```bash
+cp toolchains/rpi-aarch64-clang-toolchain.example.cmake toolchains/rpi-aarch64-clang-toolchain.local.cmake
+```
+
+2. 编辑 `toolchains/rpi-aarch64-clang-toolchain.local.cmake`：将 `TOOLCHAIN_ROOT` 和 `TARGET_SYSROOT` 修改为你环境中的实际路径；确保 `CMAKE_C_COMPILER` 与 `CMAKE_CXX_COMPILER` 指向可执行的编译器（绝对路径或在 PATH 中可见）。
+
+3. 使用脚本并传入本地 toolchain：
+
+```bash
+./scripts/build_release.sh --build-honey-rpi --honey-rpi-toolchain ./toolchains/rpi-aarch64-clang-toolchain.local.cmake
+```
+
+注意：示例文件中通常包含占位符 `${TOOLCHAIN_ROOT}`，必须替换为真实路径；脚本在找不到你指定的 `.local.cmake` 时会尝试从对应 `.example.cmake` 复制一个副本供你编辑。
+
+**常见问题与解决**
+
+- CMake 报 "toolchain references compiler ${TOOLCHAIN_ROOT}/bin/clang which is not in PATH": 编辑对应的 `.local.cmake`，把 `TOOLCHAIN_ROOT` 指向实际交叉编译器根目录，或把编译器放到 PATH 中。
+- CMake 报 "CMAKE_MAKE_PROGRAM is not set" 或生成器不匹配：确保系统安装 `ninja`（脚本会优先使用 Ninja），或者在清理后重新运行 `--clean`。
+- 找不到 OpenSSL 或 TLS 相关错误：如果使用脚本的 bootstrap，它会尝试把 OpenSSL 编译并安装到交叉 sysroot 中；若跳过 bootstrap，请确保 sysroot 内含 OpenSSL 头文件与库。
+- 运行时缺少 `libdatachannel.so.*`：脚本已经把构建出的共享库拷贝到 `release/...` 下；把整个目录复制到树莓派后直接运行即可，或把库安装到系统目录并 `ldconfig`。
+
+**部署到目标设备（树莓派）**
+
+把 `release/honeytea/raspberrypi-arm64/` 整个目录拷贝到树莓派，进入目录直接运行：
+
+```bash
+scp -r release/honeytea/raspberrypi-arm64 pi@<RPI_IP>:/home/pi/rarespecies/honeytea
+ssh pi@<RPI_IP>
+cd /home/pi/rarespecies/honeytea/raspberrypi-arm64
+./honeytea
+```
+
+如果不愿意拷整目录，也可以把 `libdatachannel.so.*` 文件拷到树莓派 `/usr/local/lib` 并运行 `sudo ldconfig`。
+
+**脚本参数速查**
+
+- `--build-honey-rpi` : 构建 HoneyTea（Raspberry Pi aarch64）
+- `--build-lemon-macos` : 构建 LemonTea（macOS 原生）
+- `--build-lemon-linux` : 构建 LemonTea（Linux x86_64）
+- `--honey-rpi-toolchain PATH` : 指定 Raspberry Pi 的 CMake toolchain 文件
+- `--lemon-linux-toolchain PATH` : 指定 Linux x64 的 CMake toolchain 文件
+- `--build-type TYPE` : CMake 构建类型，默认 `Release`
+- `--skip-bootstrap` : 跳过脚本的 bootstrap（不会安装 brew formula 或交叉编译 OpenSSL）
+- `--clean` : 删除中间目录 `.build-release` 后再构建
+
+**参考与示例文件**
+
+- 工具链示例：`toolchains/rpi-aarch64-clang-toolchain.example.cmake`、`toolchains/linux-x64-clang-toolchain.example.cmake`
+- 构建脚本：`scripts/build_release.sh`
+
+如需我替你在本机运行并上传构建产物，请回复 “执行”，我会运行并把生成的 release 路径与日志反馈给你。
+
+---
+（本页已更新以包含脚本自动生成工具链与常见故障排查说明）
 # 构建与发布说明
 
 本文档说明 LemonTea-doc 下的统一构建脚本如何使用，以及 HoneyTea 与 LemonTea 的发布产物会被放到哪里。
