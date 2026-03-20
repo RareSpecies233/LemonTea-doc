@@ -29,7 +29,7 @@ ASIO_FORMULA="asio"
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/build_release.sh [options]
+  ./scripts/macOS_build_release.sh [options]
 
 Options:
   --build-honey-rpi                 Build HoneyTea for Raspberry Pi arm64
@@ -43,12 +43,12 @@ Options:
   -h, --help                       Show this help message
 
 Examples:
-  ./scripts/build_release.sh
-  ./scripts/build_release.sh --build-lemon-macos
-  ./scripts/build_release.sh \
+  ./scripts/macOS_build_release.sh
+  ./scripts/macOS_build_release.sh --build-lemon-macos
+  ./scripts/macOS_build_release.sh \
     --build-honey-rpi \
     --honey-rpi-toolchain /abs/path/rpi-aarch64-gcc.cmake
-  ./scripts/build_release.sh \
+  ./scripts/macOS_build_release.sh \
     --build-honey-rpi \
     --build-lemon-macos \
     --build-lemon-linux \
