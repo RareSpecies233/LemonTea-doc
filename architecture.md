@@ -31,6 +31,7 @@ HoneyTea 当前由一个主进程和多个插件子进程组成：
 - 主进程负责把控制请求分发到 shell、文件系统或本地插件
 - 插件子进程通过本地 TCP 端口暴露能力
 - 插件通过 manifest 描述启动方式、端口、名称
+- 插件支持通过 LemonTea-vue3 上传安装到托管目录
 
 ### 3.2 LemonTea
 
@@ -70,6 +71,7 @@ LemonTea 当前由两个部分组成：
 - plugin_call
 - plugin_start
 - plugin_stop
+- plugin_install
 - response
 
 WebRTC 模式另外包含信令消息：
@@ -96,12 +98,15 @@ WebRTC 模式另外包含信令消息：
 
 ## 5. 子进程接入规范
 
-每个插件由一个 manifest 文件描述，字段如下：
+每个插件由一个 manifest 文件描述，推荐字段如下：
 
 ```json
 {
   "name": "camera",
   "description": "camera bridge",
+  "version": "1.0.0",
+  "protocol_version": 1,
+  "capabilities": ["get_status"],
   "executable": "python3",
   "script": "camera_plugin.py",
   "port": 9101,
@@ -115,6 +120,10 @@ WebRTC 模式另外包含信令消息：
 - 插件按行读取 JSON 请求
 - 插件按行返回 JSON 响应
 - 插件无需侵入主进程，只要遵循协议即可接入
+- `name` 只能包含字母、数字、`.`、`_`、`-`
+- `script` 与所有附带文件路径都必须是插件目录内的相对路径
+
+完整说明见 [plugin-guide.md](plugin-guide.md)。
 
 ## 6. 已提供的测试插件
 

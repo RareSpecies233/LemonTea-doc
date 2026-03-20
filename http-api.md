@@ -89,11 +89,43 @@
 
 ### POST /api/clients/{clientId}/plugins/{pluginName}/stop
 
-## 10. 查看服务端插件
+## 10. 安装客户端插件
+
+### POST /api/clients/{clientId}/plugins/install
+
+请求体：
+
+```json
+{
+  "manifest": {
+    "name": "demo_plugin",
+    "version": "1.0.0",
+    "protocol_version": 1,
+    "script": "demo_plugin.py",
+    "port": 9110,
+    "auto_start": true
+  },
+  "files": [
+    {
+      "path": "demo_plugin.py",
+      "content_base64": "cHJpbnQoImhlbGxvIikK"
+    }
+  ],
+  "replace": false
+}
+```
+
+## 11. 查看服务端插件
 
 ### GET /api/server/plugins
 
-## 11. 调用服务端插件
+## 12. 安装服务端插件
+
+### POST /api/server/plugins/install
+
+请求体与客户端插件安装一致。
+
+## 13. 调用服务端插件
 
 ### POST /api/server/plugins/{pluginName}/call
 
@@ -108,13 +140,13 @@
 }
 ```
 
-## 12. 启停服务端插件
+## 14. 启停服务端插件
 
 ### POST /api/server/plugins/{pluginName}/start
 
 ### POST /api/server/plugins/{pluginName}/stop
 
-## 13. curl 测试示例
+## 15. curl 测试示例
 
 ### 获取客户端列表
 
@@ -143,3 +175,5 @@ curl -X POST http://127.0.0.1:18080/api/clients/raspi-dev-01/plugins/camera/call
   -H 'Content-Type: application/json' \
   -d '{"action":"list_devices","payload":{}}'
 ```
+
+插件 manifest 规范与上传约束见 [plugin-guide.md](plugin-guide.md)。
