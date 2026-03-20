@@ -269,6 +269,47 @@ configure_and_build() {
   local build_dir="$2"
   shift 2
 
+  local project_name
+  project_name="$(basename "${source_dir}")"
+
+  local -a fetchcontent_args=()
+  local -a required_deps=()
+  local missing_local_dep=false
+
+  local dep dep_upper candidate
+  if [[ "${project_name}" == "HoneyTea" ]]; then
+    required_deps=(asio nlohmann_json libdatachannel)
+  elif [[ "${project_name}" == "LemonTea" ]]; then
+    required_deps=(asio nlohmann_json crow libdatachannel)
+  fi
+
+  for dep in "${required_deps[@]}"; do
+    candidate=""
+    for candidate in \
+      "${source_dir}/build/_deps/${dep}-src" \
+      "${WORKSPACE_DIR}/build/_deps/${dep}-src"
+    do
+      if [[ -d "${candidate}" ]]; then
+        dep_upper="$(printf '%s' "${dep}" | tr '[:lower:]' '[:upper:]')"
+        fetchcontent_args+=("-DFETCHCONTENT_SOURCE_DIR_${dep_upper}=${candidate}")
+        break
+      fi
+    done
+
+    if [[ ! -d "${candidate}" ]]; then
+      missing_local_dep=true
+    fi
+  done
+
+  if [[ ${#fetchcontent_args[@]} -gt 0 ]]; then
+    fetchcontent_args+=("-DFETCHCONTENT_UPDATES_DISCONNECTED=ON")
+  fi
+
+  if [[ "${missing_local_dep}" == false && ${#required_deps[@]} -gt 0 ]]; then
+    fetchcontent_args+=("-DFETCHCONTENT_FULLY_DISCONNECTED=ON")
+    log "using local FetchContent sources for ${project_name}"
+  fi
+
   # Prefer Ninja generator if available to avoid Makefile/tool selection issues
   local generator_args=()
   if command -v ninja >/dev/null 2>&1; then
@@ -282,7 +323,7 @@ configure_and_build() {
     rm -rf "${build_dir}"
   fi
 
-  cmake -S "${source_dir}" -B "${build_dir}" "${generator_args[@]}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" "$@"
+  cmake -S "${source_dir}" -B "${build_dir}" "${generator_args[@]}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" "${fetchcontent_args[@]}" "$@"
   cmake --build "${build_dir}" --config "${BUILD_TYPE}"
 }
 
@@ -450,17 +491,44 @@ prepare() {
 
   validate_toolchain() {
     local f="$1"
-    local cc cpp
-    # extract quoted value if present
-    cc="$(grep -E 'CMAKE_C_COMPILER' "${f}" 2>/dev/null | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"
-    cpp="$(grep -E 'CMAKE_CXX_COMPILER' "${f}" 2>/dev/null | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"
-    # fallback: extract unquoted token
-    if [[ -z "${cc}" ]]; then
-      cc="$(grep -E 'CMAKE_C_COMPILER' "${f}" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '()')"
-    fi
-    if [[ -z "${cpp}" ]]; then
-      cpp="$(grep -E 'CMAKE_CXX_COMPILER' "${f}" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '()')"
-    fi
+      local cc cpp toolchain_root target_triple target_sysroot
+
+      extract_cmake_value() {
+        local key="$1"
+        local value
+        value="$(grep -E "^[[:space:]]*set\(${key}[[:space:]]+" "${f}" 2>/dev/null | head -n1 | sed -E 's/^[[:space:]]*set\([^[:space:]]+[[:space:]]+"?([^" )]+)"?.*/\1/')"
+        printf '%s' "${value}"
+      }
+
+      resolve_cmake_vars() {
+        local value="$1"
+        value="${value//\$\{TOOLCHAIN_ROOT\}/${toolchain_root}}"
+        value="${value//\$\{TARGET_TRIPLE\}/${target_triple}}"
+        value="${value//\$\{TARGET_SYSROOT\}/${target_sysroot}}"
+        printf '%s' "${value}"
+      }
+
+      toolchain_root="$(extract_cmake_value 'TOOLCHAIN_ROOT')"
+      target_triple="$(extract_cmake_value 'TARGET_TRIPLE')"
+      target_sysroot="$(extract_cmake_value 'TARGET_SYSROOT')"
+      if [[ -z "${target_sysroot}" && -n "${toolchain_root}" && -n "${target_triple}" ]]; then
+        target_sysroot="${toolchain_root}/${target_triple}/sysroot"
+      else
+        target_sysroot="$(resolve_cmake_vars "${target_sysroot}")"
+      fi
+
+      # extract quoted value if present
+      cc="$(extract_cmake_value 'CMAKE_C_COMPILER')"
+      cpp="$(extract_cmake_value 'CMAKE_CXX_COMPILER')"
+      # fallback: extract unquoted token
+      if [[ -z "${cc}" ]]; then
+        cc="$(grep -E 'CMAKE_C_COMPILER' "${f}" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '()')"
+      fi
+      if [[ -z "${cpp}" ]]; then
+        cpp="$(grep -E 'CMAKE_CXX_COMPILER' "${f}" 2>/dev/null | head -n1 | awk '{print $2}' | tr -d '()')"
+      fi
+      cc="$(resolve_cmake_vars "${cc}")"
+      cpp="$(resolve_cmake_vars "${cpp}")"
     for p in "${cc}" "${cpp}"; do
       if [[ -n "${p}" ]]; then
         if [[ "${p}" = /* ]]; then
@@ -468,7 +536,10 @@ prepare() {
             fail "toolchain ${f} references compiler ${p} which does not exist or is not executable; please edit the toolchain file"
           fi
         else
-          # relative or bare name; check PATH
+            if [[ "${p}" == *'${'* ]]; then
+              fail "toolchain ${f} contains unresolved compiler path ${p}; please edit the toolchain file or use the generated GCC toolchain"
+            fi
+            # relative or bare name; check PATH
           if ! command -v "${p}" >/dev/null 2>&1; then
             fail "toolchain ${f} references compiler ${p} which is not in PATH; please edit the toolchain file to point to a valid compiler"
           fi

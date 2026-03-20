@@ -45,6 +45,8 @@ release/
 
 该工作流适合在 macOS 主机上，结合 Homebrew 提供的交叉工具链包使用（脚本会尝试安装需要的 formula）。
 
+脚本还会优先复用工作区已有的依赖源码缓存，例如 `build/_deps/`、`HoneyTea/build/_deps/`、`LemonTea/build/_deps/` 下的 `asio-src`、`nlohmann_json-src`、`crow-src`、`libdatachannel-src`。当这些目录齐全时，脚本会以离线模式调用 CMake，避免重新访问 GitHub。
+
 **手动工作流 — 使用 clang + 本地 toolchain（可选）**
 
 如果你更偏好 clang + 自行准备的 sysroot，按原始文档步骤：
@@ -67,9 +69,11 @@ cp toolchains/rpi-aarch64-clang-toolchain.example.cmake toolchains/rpi-aarch64-c
 
 **常见问题与解决**
 
+- 脚本启动即报 `toolchain ... references compiler ${TOOLCHAIN_ROOT}/bin/${TARGET_TRIPLE}-gcc which is not in PATH`：这是旧版脚本对 CMake 变量路径做了错误校验。更新后的脚本会先展开 `TOOLCHAIN_ROOT`、`TARGET_TRIPLE`、`TARGET_SYSROOT` 再检查编译器路径；如果你仍看到这个报错，说明 toolchain 文件里确实还残留未定义变量或路径写错。
 - CMake 报 "toolchain references compiler ${TOOLCHAIN_ROOT}/bin/clang which is not in PATH": 编辑对应的 `.local.cmake`，把 `TOOLCHAIN_ROOT` 指向实际交叉编译器根目录，或把编译器放到 PATH 中。
 - CMake 报 "CMAKE_MAKE_PROGRAM is not set" 或生成器不匹配：确保系统安装 `ninja`（脚本会优先使用 Ninja），或者在清理后重新运行 `--clean`。
 - 找不到 OpenSSL 或 TLS 相关错误：如果使用脚本的 bootstrap，它会尝试把 OpenSSL 编译并安装到交叉 sysroot 中；若跳过 bootstrap，请确保 sysroot 内含 OpenSSL 头文件与库。
+- 构建 LemonTea 时在 `libdatachannel` 子模块下载阶段失败：先检查工作区是否已经有 `build/_deps/libdatachannel-src` 或 `LemonTea/build/_deps/libdatachannel-src`。更新后的脚本会自动优先复用这些本地缓存；只有在本地缓存缺失时才会回退到网络下载。
 - 运行时缺少 `libdatachannel.so.*`：脚本已经把构建出的共享库拷贝到 `release/...` 下；把整个目录复制到树莓派后直接运行即可，或把库安装到系统目录并 `ldconfig`。
 
 **部署到目标设备（树莓派）**
@@ -95,6 +99,14 @@ cd /home/pi/rarespecies/honeytea/raspberrypi-arm64
 - `--build-type TYPE` : CMake 构建类型，默认 `Release`
 - `--skip-bootstrap` : 跳过脚本的 bootstrap（不会安装 brew formula 或交叉编译 OpenSSL）
 - `--clean` : 删除中间目录 `.build-release` 后再构建
+
+**校验行为说明**
+
+脚本会在真正调用 CMake 之前检查 toolchain 文件中的 `CMAKE_C_COMPILER` 和 `CMAKE_CXX_COMPILER`。如果这两个字段使用了类似 `${TOOLCHAIN_ROOT}` 的变量，脚本会先根据同一文件中的 `TOOLCHAIN_ROOT`、`TARGET_TRIPLE`、`TARGET_SYSROOT` 展开为绝对路径，再验证编译器是否存在。这意味着：
+
+- 脚本自动生成的 GCC toolchain 可以直接通过校验并投入构建。
+- 你自定义的 `.local.cmake` 也可以继续保留变量写法，不必手工把所有路径展开成硬编码绝对路径。
+- 只有在变量未定义或展开后路径仍不存在时，脚本才会提前失败。
 
 **参考与示例文件**
 
